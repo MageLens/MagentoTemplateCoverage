@@ -233,6 +233,8 @@ Only if you control its test environment and serve instrumented copies there. In
 
 See the [changelog](CHANGELOG.md) and [GitHub releases](https://github.com/MageLens/magento-template-coverage/releases). Report reproducible problems in [issues](https://github.com/MageLens/magento-template-coverage/issues), including the package version, runner, template syntax and a minimal example.
 
+For project inquiries, visit [MageLens](https://magelens.dev/) or email [hello@magelens.dev](mailto:hello@magelens.dev).
+
 ## License
 
 Licensed under the [MIT License](LICENSE), which permits commercial use, modification and redistribution under its terms.
