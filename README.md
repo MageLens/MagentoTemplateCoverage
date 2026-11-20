@@ -1,5 +1,5 @@
 <!--
-SPDX-FileCopyrightText: Private Entrepreneur Vitalii Boiko
+SPDX-FileCopyrightText: MageLens
 SPDX-License-Identifier: MIT
 License: see LICENSE in the repository root.
 -->
@@ -8,15 +8,17 @@ License: see LICENSE in the repository root.
 
 Coverage for Magento HTML/PHTML templates, including Knockout, jQuery templates, Hyvä/Alpine bindings and inline JavaScript. Supports Cypress and Playwright collection with Luma/Knockout, Hyvä CSP and regular Hyvä/Alpine 3. Reports separate executable source lines from DOM presence. Originals stay untouched; only disposable copies are instrumented.
 
-Use this package to find untested storefront bindings and inline scripts in Magento modules and themes. For a Docker environment that combines template, PHP and whole-file JavaScript reports, see [MageLens](https://github.com/VitaliyBoyko/MageLens).
+Use this package to find untested storefront bindings and inline scripts in Magento modules and themes. For a Docker environment that combines template, PHP and whole-file JavaScript reports, see [MageLens](https://github.com/MageLens/MageLens).
 
 [Install](#install) · [Supported syntax](#html-template-syntax) · [Report semantics](#reading-the-numbers) · [FAQ](#faq)
 
 ## Install
 
 ```sh
-npm install --save-dev @vitaliiboiko/magento-template-coverage@latest
+npm install --save-dev @magelens/magento-template-coverage@latest
 ```
+
+If you already use `@vitaliiboiko/magento-template-coverage`, remove it from your dev dependencies and change your imports to `@magelens/magento-template-coverage`. The CLI command stays `magento-template-coverage`.
 
 Node.js 20.19+ within 20.x, or Node.js 22.12+ and an existing Cypress or Playwright installation are required. Version 2 drops Node.js 18 and older Node.js 20/22 releases to load the security-patched HTML parser synchronously. Each test runner retains its own Node/browser requirements.
 
@@ -45,7 +47,7 @@ Use repeated `--root` and matching `--map` arguments to select other source dire
 Register the Cypress adapter before visiting the application:
 
 ```js
-const { registerTemplateCoverage } = require('@vitaliiboiko/magento-template-coverage/cypress');
+const { registerTemplateCoverage } = require('@magelens/magento-template-coverage/cypress');
 registerTemplateCoverage({ outputDir: '.template-coverage' });
 ```
 
@@ -53,7 +55,7 @@ For Playwright, extend your existing test fixture before using its `page` or `co
 
 ```js
 const {test: base, expect} = require('@playwright/test');
-const {withTemplateCoverage} = require('@vitaliiboiko/magento-template-coverage/playwright');
+const {withTemplateCoverage} = require('@magelens/magento-template-coverage/playwright');
 const test = withTemplateCoverage(base, {outputDir: '.template-coverage'});
 module.exports = {test, expect};
 ```
@@ -67,7 +69,7 @@ To integrate [elgentos/magento2-playwright](https://github.com/elgentos/magento2
 ```ts
 // tests/utils/fixtures.utils.ts
 import {test as baseTest, guestTest as baseGuest} from '@base/utils/fixtures.utils';
-import {withTemplateCoverage} from '@vitaliiboiko/magento-template-coverage/playwright';
+import {withTemplateCoverage} from '@magelens/magento-template-coverage/playwright';
 export * from '@base/utils/fixtures.utils';
 export const test = withTemplateCoverage(baseTest);
 export const guestTest = withTemplateCoverage(baseGuest);
@@ -182,11 +184,11 @@ their setup activity. For a separate warm-up browser that must not record covera
 
 ```js
 // Playwright: register before navigating any page in this context.
-const {installTemplateRuntime} = require('@vitaliiboiko/magento-template-coverage/playwright');
+const {installTemplateRuntime} = require('@magelens/magento-template-coverage/playwright');
 await installTemplateRuntime(context);
 
 // Cypress: add to the warm-up support file.
-const {observeExecution} = require('@vitaliiboiko/magento-template-coverage/browser');
+const {observeExecution} = require('@magelens/magento-template-coverage/browser');
 Cypress.on('window:before:load', win => observeExecution(win, () => {}));
 ```
 
@@ -213,7 +215,7 @@ source IDs, real counters, false-body zeros, cached rerenders and unchanged rend
 
 ### Does this replace PHP or JavaScript coverage?
 
-No. This package measures browser expressions and inline scripts in HTML/PHTML. Use [PCOV](https://github.com/VitaliyBoyko/pcov) for PHP executable lines and Istanbul for whole `.js` files. [MageLens](https://github.com/VitaliyBoyko/MageLens) integrates all three collectors.
+No. This package measures browser expressions and inline scripts in HTML/PHTML. Use [PCOV](https://github.com/MageLens/pcov) for PHP executable lines and Istanbul for whole `.js` files. [MageLens](https://github.com/MageLens/MageLens) integrates all three collectors.
 
 ### Why is a visible template still uncovered?
 
@@ -229,7 +231,7 @@ Only if you control its test environment and serve instrumented copies there. In
 
 ## Releases and support
 
-See the [changelog](CHANGELOG.md) and [GitHub releases](https://github.com/VitaliyBoyko/magento-template-coverage/releases). Report reproducible problems in [issues](https://github.com/VitaliyBoyko/magento-template-coverage/issues), including the package version, runner, template syntax and a minimal example.
+See the [changelog](CHANGELOG.md) and [GitHub releases](https://github.com/MageLens/magento-template-coverage/releases). Report reproducible problems in [issues](https://github.com/MageLens/magento-template-coverage/issues), including the package version, runner, template syntax and a minimal example.
 
 ## License
 

@@ -1,15 +1,15 @@
 {
-  "name": "@vitaliiboiko/magento-template-coverage",
-  "version": "2.0.0",
+  "name": "@magelens/magento-template-coverage",
+  "version": "2.0.1",
   "description": "Magento 2 HTML/PHTML template execution coverage for Cypress and Playwright, including Knockout, Hyva/Alpine and inline JavaScript",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/VitaliyBoyko/magento-template-coverage.git"
+    "url": "git+https://github.com/MageLens/magento-template-coverage.git"
   },
-  "homepage": "https://github.com/VitaliyBoyko/magento-template-coverage#readme",
+  "homepage": "https://github.com/MageLens/magento-template-coverage#readme",
   "bugs": {
-    "url": "https://github.com/VitaliyBoyko/magento-template-coverage/issues"
+    "url": "https://github.com/MageLens/magento-template-coverage/issues"
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"

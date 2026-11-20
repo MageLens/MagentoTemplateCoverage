@@ -1,5 +1,5 @@
 <!--
-SPDX-FileCopyrightText: Private Entrepreneur Vitalii Boiko
+SPDX-FileCopyrightText: MageLens
 SPDX-License-Identifier: MIT
 License: see LICENSE in the repository root.
 -->
@@ -8,7 +8,7 @@ License: see LICENSE in the repository root.
 
 ## Project identity and scope
 
-`@vitaliiboiko/magento-template-coverage` measures Magento 2 HTML/PHTML template execution from Cypress and Playwright tests. It supports Knockout bindings, jQuery/Underscore/Magento literal templates, Hyvä/Alpine directives and inline JavaScript, with separate DOM-presence reporting.
+`@magelens/magento-template-coverage` measures Magento 2 HTML/PHTML template execution from Cypress and Playwright tests. It supports Knockout bindings, jQuery/Underscore/Magento literal templates, Hyvä/Alpine directives and inline JavaScript, with separate DOM-presence reporting.
 
 Read [README.md](README.md) for integration and metric semantics, and [CHANGELOG.md](CHANGELOG.md) for format/behavior changes. This CommonJS Node package is distinct from MageLens, which installs Magento and combines PHP, JavaScript and template reports. This package does not install Magento or measure PHP execution.
 

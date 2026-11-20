@@ -1,10 +1,14 @@
 <!--
-SPDX-FileCopyrightText: Private Entrepreneur Vitalii Boiko
+SPDX-FileCopyrightText: MageLens
 SPDX-License-Identifier: MIT
 License: see LICENSE in the repository root.
 -->
 
 # Changelog
+
+## 2.0.1
+
+- Publish under `@magelens/magento-template-coverage` with the same CLI and exports. Existing versions remain available under the previous scope.
 
 ## 2.0.0 - 2026-11-09
 

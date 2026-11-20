@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: Private Entrepreneur Vitalii Boiko
+// SPDX-FileCopyrightText: MageLens
 // SPDX-License-Identifier: MIT
 // License: see LICENSE in the repository root.
 
