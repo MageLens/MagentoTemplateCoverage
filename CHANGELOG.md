@@ -9,6 +9,7 @@ License: see LICENSE in the repository root.
 ## Unreleased
 
 - Accept a `metadata` function in the Cypress `registerTemplateCoverage` options. It is called once per test, and its fields are added to the record without replacing the record's own fields, as the Playwright `metadata` option already does.
+- Keep custom `metadata` passed to `withTemplateCoverage` through `templateCoverageOptions`. The fixture used to replace it with the test identity fields, which still take precedence.
 
 ## 2.0.1
 

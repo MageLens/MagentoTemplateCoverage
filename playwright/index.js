@@ -127,8 +127,9 @@ function withTemplateCoverage(test, options = {}) {
             finally { if (browser.newContext === wrapped) browser.newContext = newContext; }
         }, {scope: 'worker'}],
         context: async ({context, templateCoverageOptions}, use, testInfo) => {
+            // Custom metadata, such as a test attempt ID, is kept; the test identity fields cannot be replaced.
             const coverage = await registerTemplateCoverage(context, {...templateCoverageOptions,
-                metadata: {spec: testInfo.file, test: testInfo.titlePath, retry: testInfo.retry,
+                metadata: {...templateCoverageOptions.metadata, spec: testInfo.file, test: testInfo.titlePath, retry: testInfo.retry,
                     project: testInfo.project.name, worker: testInfo.workerIndex}});
             try { await use(context); } finally { await coverage.stop(); }
         }
