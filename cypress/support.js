@@ -7,7 +7,10 @@
 const { observeTemplates } = require('../lib/browser');
 const { observeExecution } = require('../lib/execution');
 
-function registerTemplateCoverage({ outputDir = '.template-coverage' } = {}) {
+// `metadata` is called once per test attempt in afterEach; its fields are added to the record,
+// for example to identify the attempt. The record's own fields cannot be replaced.
+function registerTemplateCoverage({ outputDir = '.template-coverage', metadata } = {}) {
+    if (metadata !== undefined && typeof metadata !== 'function') throw new TypeError('metadata must be a function');
     let collector;
     let execution;
     let ids = new Set();
@@ -52,7 +55,10 @@ function registerTemplateCoverage({ outputDir = '.template-coverage' } = {}) {
             if (collector) collector.flush();
             const recordId = globalThis.crypto.randomUUID?.() ||
                 `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+            const extra = metadata ? metadata() : {};
+            if (extra === null || typeof extra !== 'object' || Array.isArray(extra)) throw new TypeError('metadata must return an object');
             const record = {
+                ...extra,
                 schemaVersion: 2,
                 recordId,
                 spec: Cypress.spec.relative,

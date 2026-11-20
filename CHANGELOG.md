@@ -6,6 +6,10 @@ License: see LICENSE in the repository root.
 
 # Changelog
 
+## Unreleased
+
+- Accept a `metadata` function in the Cypress `registerTemplateCoverage` options. It is called once per test, and its fields are added to the record without replacing the record's own fields, as the Playwright `metadata` option already does.
+
 ## 2.0.1
 
 - Publish under `@magelens/magento-template-coverage` with the same CLI and exports. Existing versions remain available under the previous scope.
