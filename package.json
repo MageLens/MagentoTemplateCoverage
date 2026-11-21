@@ -1,6 +1,6 @@
 {
   "name": "@magelens/magento-template-coverage",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "description": "Magento 2 HTML/PHTML template execution coverage for Cypress and Playwright, including Knockout, Hyva/Alpine and inline JavaScript",
   "license": "MIT",
   "author": {
