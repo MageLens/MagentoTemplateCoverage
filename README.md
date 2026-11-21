@@ -51,6 +51,12 @@ const { registerTemplateCoverage } = require('@magelens/magento-template-coverag
 registerTemplateCoverage({ outputDir: '.template-coverage' });
 ```
 
+To add fields to each record, such as an ID of the current test attempt, pass `metadata`, a function called once per test in `afterEach`. Its fields precede the record's own fields, which they cannot replace. The Playwright adapters accept a `metadata` object in the same way; with `withTemplateCoverage`, pass it per test through the `templateCoverageOptions` fixture, for example `test.use({templateCoverageOptions: {outputDir: '.template-coverage', metadata: {attempt: 'id'}}})`. Its `spec`, `test`, `retry`, `project` and `worker` fields always describe the running test.
+
+```js
+registerTemplateCoverage({ outputDir: '.template-coverage', metadata: () => ({ attempt: currentAttemptId() }) });
+```
+
 For Playwright, extend your existing test fixture before using its `page` or `context`:
 
 ```js
