@@ -6,6 +6,11 @@ License: see LICENSE in the repository root.
 
 # Changelog
 
+## 2.1.1 - 2026-11-21
+
+- Correct the package repository URL after the repository rename so npm trusted publishing can verify provenance.
+- Include the metadata improvements from 2.1.0, which was not published to npm.
+
 ## 2.1.0 - 2026-11-21
 
 - Accept a `metadata` function in the Cypress `registerTemplateCoverage` options. It is called once per test, and its fields are added to the record without replacing the record's own fields, as the Playwright `metadata` option already does.
