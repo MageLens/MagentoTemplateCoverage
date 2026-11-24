@@ -48,6 +48,41 @@ test('instrumented Alpine CSP works in a browser without the coverage runtime', 
     }
 });
 
+for (const collect of [true, false]) {
+    test(`Alpine CSP handles a morphed listener ${collect ? 'with' : 'without'} coverage`, async ({context, page, site}) => {
+        const hits = path.join(site.root, 'hits');
+        const coverage = collect ? await registerTemplateCoverage(context, {outputDir: hits}) : null;
+        const errors = [];
+        page.on('pageerror', error => errors.push(error.message));
+        try {
+            const response = await page.goto(`${site.url}/csp.html`);
+            const source = await response.text();
+            expect(source).toMatch(/<button[^>]*id="increment"[^>]*x-on:click="increment"/);
+            const entry = site.manifest.templates.find(template => template.path.endsWith('/csp.phtml'));
+            const click = entry.statements.find(statement => statement.binding === 'x-on:click');
+            expect(click).toBeDefined();
+            const button = page.locator('#increment');
+            const count = page.locator('#count');
+            await expect(count).toHaveText('0');
+            await page.addScriptTag({url: `${site.url}/morphdom.js`});
+            await button.evaluate((element, html) => {
+                const original = new DOMParser().parseFromString(html, 'text/html').getElementById('increment');
+                if (window.morphdom(element, original) !== element) throw new Error('Expected the existing button to be updated');
+            }, source);
+            await button.click();
+            await expect(count).toHaveText('1');
+            expect(errors).toEqual([]);
+            if (coverage) {
+                await coverage.stop();
+                const [record] = readRecords(hits);
+                expect(record.hits[entry.id]?.[click.id] ?? 0, 'Coverage of the rebound x-on:click statement').toBeGreaterThan(0);
+            }
+        } finally {
+            await coverage?.stop();
+        }
+    });
+}
+
 test('strict CSP preserves Alpine behavior, scopes and execution coverage', async ({context, page, site}) => {
     const hits = path.join(site.root, 'hits');
     const coverage = await registerTemplateCoverage(context, {outputDir: hits});
