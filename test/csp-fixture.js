@@ -56,7 +56,8 @@ function serve(req, res, copy) {
     }
     if (req.url === '/alpine-csp.js') {
         res.setHeader('Content-Type', 'application/javascript');
-        res.end(fs.readFileSync(require.resolve('@alpinejs/csp').replace(/module.cjs.js$/, 'cdn.js'))); return true;
+        const asset = process.env.MTC_ALPINE_CSP_PATH || require.resolve('@alpinejs/csp').replace(/module.cjs.js$/, 'cdn.js');
+        res.end(fs.readFileSync(asset)); return true;
     }
     if (['/csp.html', '/csp-baseline.html'].includes(req.url)) {
         res.setHeader('Content-Type', 'text/html'); res.setHeader('Content-Security-Policy', policy);

@@ -38,12 +38,14 @@ const source = `<?php declare(strict_types=1); $mode = $argv[1] ?? ''; $event = 
     <?php endif; ?>
     <?php if ($mode === 'parent-model'): ?><input id="parent-model" x-model.parent="nameModel"><?php endif; ?>
     <?php if ($mode === 'dotted-getters'): ?><button id="dotted-getters" :title="descriptor.label">Dotted title</button><?php endif; ?>
+    <?php if ($mode === 'csp-boolean'): ?><button id="csp-boolean" x-data="booleanNames" :disabled="true">Disabled</button><?php endif; ?>
 </section>`;
 const shell = body => `<!doctype html>
 <script defer src="/alpine-csp.js"></script><script src="/morphdom.js"></script>
 ${body}
 <script nonce="mtc-fixture">
 document.addEventListener('alpine:init', () => {
+    Alpine.data('booleanNames', () => ({true: true}));
     Alpine.data('extractTitle', function () {
         return {initial: Alpine.extractProp(this.$el, 'title')};
     });
@@ -137,6 +139,20 @@ async function hits(page, site, file, binding = 'x-on:click') {
 }
 
 for (const collect of [true, false]) {
+    test(`CSP resolves a boolean-named binding from component data with collection ${collect}`, async ({page, site}) => {
+        await open(page, site, collect);
+        const errors = [];
+        page.on('pageerror', error => errors.push(error.message));
+        page.on('console', message => {
+            if (/^Alpine (?:Warning|Error|Expression Error):/.test(message.text())) errors.push(message.text());
+        });
+        const response = await page.goto(site.url + '/a.html?mode=csp-boolean');
+        expect(await response.text()).toContain(':disabled="true"');
+        const button = page.locator('#csp-boolean');
+        expect({disabled: await button.isDisabled(), errors}).toEqual({disabled: true, errors: []});
+        if (collect) expect(await hits(page, site, 'a', ':disabled')).toBeGreaterThan(0);
+    });
+
     test(`morphdom mutation batch leaves one Alpine CSP listener ${collect ? 'with' : 'without'} collection`, async ({page, site}) => {
         const original = await open(page, site, collect);
         const alternate = await (await page.request.get(site.url + '/a.html?mode=alternate')).text();

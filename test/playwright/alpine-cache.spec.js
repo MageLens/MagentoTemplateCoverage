@@ -62,6 +62,30 @@ async function open(page, collect, markup = site) {
 }
 
 for (const collect of [true, false]) {
+    test(`global binding getters use native Alpine evaluation with collection ${collect}`, async ({page}) => {
+        const errors = [];
+        page.on('pageerror', error => errors.push(error.message));
+        await open(page, collect, site + `
+            <script>
+                const productLabels = {
+                    get label() { return Alpine.evaluate(document.getElementById('product'), 'formatTitle'); }
+                };
+                document.addEventListener('alpine:init', () => {
+                    Alpine.data('titleSource', title => ({
+                        title, true: false, formatTitle() { return this.title; }
+                    }));
+                });
+            </script>
+            <div id="product" x-data="titleSource('from-product')"></div>
+            <button id="getter-title" x-data="titleSource('from-button')" :title="productLabels.label"
+                :disabled="true">Global getter</button>
+        `);
+        const button = page.locator('#getter-title');
+        await expect(button).toHaveAttribute('title', 'from-product', {timeout: 2000});
+        await expect(button).toBeDisabled();
+        expect(errors).toEqual([]);
+    });
+
     test(`parent morphs preserve an existing binding and update a fresh prop read with collection ${collect}`, async ({page}) => {
         await open(page, collect, globalBindingPage);
         const bound = page.locator('#bound-title');
