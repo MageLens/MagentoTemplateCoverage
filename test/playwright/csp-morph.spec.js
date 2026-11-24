@@ -17,7 +17,7 @@ const source = `<?php declare(strict_types=1); $mode = $argv[1] ?? ''; $event = 
 <section id="component" x-data="probeState">
     <button id="probe" <?php if ($mode !== 'off'): ?>x-on:click="increment<?= $mode === 'alternate' ? 'Alternate' : ($mode === 'intermediate' ? 'Intermediate' : '') ?>"<?php endif; ?>>Increment</button>
     <button id="once" x-on:click.once="increment">Increment once</button>
-    <button id="event" x-on:evt-<?= (int)$event ?>="increment">Generated event</button>
+    <button x-on:evt-<?= (int)$event ?>="increment" id="event">Generated event</button>
     <output id="count" x-text="count"></output><output id="handled" x-text="handled"></output>
 </section>`;
 const shell = body => `<!doctype html>
@@ -203,6 +203,7 @@ for (const file of ['a', 'b']) {
         await morph(button, replacement);
         await button.dispatchEvent('evt-1');
         await expect(page.locator('#count')).toHaveText('0');
+        expect(errors).toEqual([]);
         await button.dispatchEvent('evt-2');
         await expect(page.locator('#count')).toHaveText('1', {timeout: 2000});
         expect(errors).toEqual([]);
