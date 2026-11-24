@@ -103,15 +103,26 @@ test('PHP event names retain complete names, modifiers, offsets and conditional 
     ]);
     assert.deepEqual(result.statements.map(s => s.start.line), [3, 4, 4, 5, 6]);
     const php = text => maskPhp(text).ranges.map(([start, end]) => text.slice(start, end));
-    assert.deepEqual(php(result.content), php(source));
+    assert.deepEqual(php(result.content).filter(code => code !== '<?php ob_start(); ?>' && !code.includes('$__mtcAlpineName_')), php(source));
     assert.equal(result.content.split('\n').length, source.split('\n').length);
     for (const productId of [42, 0]) {
         const render = text => execFileSync('php', ['-n'], {input: text.replace('$productId = 42', `$productId = ${productId}`), encoding: 'utf8'});
         const baseline = render(source), instrumented = render(result.content);
         assert.equal(instrumented.includes('@update-prices-'), Boolean(productId));
         assert.match(instrumented, /x-mtc="[^"]+"/);
+        assert.match(instrumented, new RegExp(`@update-gallery-${productId}\\.window="updateImage" data-mtc-binding-\\d+="@update-gallery-${productId}\\.window"`));
         assert.equal(instrumented.replace(/ x-mtc="[^"]+"| data-mtc-binding-\d+="[^"]*"/g, ''), baseline);
     }
+});
+
+test('a PHP-generated Alpine event name is rendered once and normalized in its marker', () => {
+    const source = '<?php $i = 1; ?><div @EVT-<?= $i++ ?>.window\n="add"><?= $i ?></div>';
+    const result = analyzeStatements(source, id, 'alpine', {phtml: true});
+    const render = text => execFileSync('php', ['-n'], {input: text, encoding: 'utf8'});
+    const instrumented = render(result.content);
+    assert.match(instrumented, /data-mtc-binding-0="@evt-1\.window"/);
+    assert.equal(instrumented.replace(/ x-mtc="[^"]+"| data-mtc-binding-0="[^"]*"/g, ''), render(source));
+    assert.equal(result.content.split('\n').length, source.split('\n').length);
 });
 
 test('modifier-only listeners have no expression to instrument, while malformed expressions remain visible', () => {
