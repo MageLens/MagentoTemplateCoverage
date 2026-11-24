@@ -1,0 +1,34 @@
+{{! SPDX-FileCopyrightText: MageLens
+SPDX-License-Identifier: MIT
+License: see LICENSE in the repository root. }}
+{{#summaryHeading}}
+{{>heading}}
+{{/summaryHeading}}
+{{#baseline}}
+<p><strong>No browser observations collected. This is an inventory baseline, not a completed coverage run.</strong></p>
+{{/baseline}}
+{{#allFiles}}
+<p><label>Filter templates <input id="filter" type="search" placeholder="Path, engine or status"></label></p>
+{{/allFiles}}
+<div class="scroll"><table>
+<thead><tr><th>Directory / file</th><th>Executable lines</th><th>Statements</th><th>Script functions</th><th>Script branches</th><th>Template DOM presence</th></tr></thead>
+<tbody>
+{{#total}}
+<tr class="total"><td>Total</td>{{>metrics}}</tr>
+{{/total}}
+{{#rows}}
+<tr><td>{{#isDirectory}}📁 {{/isDirectory}}{{#link}}<a href="{{link}}">{{label}}</a>{{/link}}{{^link}}{{label}}{{/link}}{{#details}}<br><span class="muted">{{engines}} · {{status}}</span>{{#notes}}<br>{{#messages}}{{separator}}{{text}}{{/messages}}{{/notes}}{{/details}}</td>{{>metrics}}</tr>
+{{/rows}}
+</tbody></table></div>
+{{#directory}}
+{{#scriptSummary}}
+<p>Inline scripts: {{instrumented}} instrumented; {{unsupported}} unsupported. PHP output: {{linked}} linked to child templates; {{empty}} empty; {{unresolved}} unresolved; {{unobserved}} not observed. Rendering and source links do not imply JavaScript execution. See file notes and <a href="coverage-summary.json">the JSON report</a> for details.</p>
+{{/scriptSummary}}
+<p><a href="{{allFilesLink}}">Search all files</a></p>
+<p class="legend"><strong>Legend</strong> · <span class="low">Low: below 50%</span> <span class="medium">Medium: 50–90%</span> <span class="high">High: 90–100%</span> · N/A: no measured statements</p>
+<p>{{semantics}}</p>
+<p class="muted">Inventory roots: {{roots}}. Physical files are counted independently; module/theme applicability is not resolved.</p>
+{{/directory}}
+{{#allFiles}}
+<script>document.getElementById('filter').addEventListener('input',function(){var query=this.value.toLowerCase();document.querySelectorAll('tbody tr:not(.total)').forEach(function(row){row.hidden=!row.textContent.toLowerCase().includes(query);});});</script>
+{{/allFiles}}

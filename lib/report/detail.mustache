@@ -1,0 +1,35 @@
+{{! SPDX-FileCopyrightText: MageLens
+SPDX-License-Identifier: MIT
+License: see LICENSE in the repository root. }}
+{{#summaryHeading}}
+{{>heading}}
+{{/summaryHeading}}
+{{#notes}}
+<p>{{#messages}}{{separator}}{{text}}{{/messages}}</p>
+{{/notes}}
+<p>Engines: {{engines}} · DOM: {{status}}; {{observations}} test observations.</p>
+<p>{{semantics}}</p><p>Green: executed. Red: never executed. Amber: some statements on this line did not execute. Grey: no measured statement.</p>
+<div class="scroll"><table class="source"><thead><tr><th>Line</th><th>Hits</th><th>Original source</th></tr></thead><tbody>
+{{#sourceRows}}
+<tr id="L{{number}}" class="{{state}}"><td class="number"><a href="#L{{number}}">{{number}}</a></td><td class="hits">{{hits}}</td><td class="code">{{text}}</td></tr>
+{{/sourceRows}}
+</tbody></table></div>
+<h2>Template statements</h2><table><thead><tr><th>Line:column</th><th>Expression / directive</th><th>Syntax</th><th>Executions</th></tr></thead><tbody>
+{{#statements}}
+<tr class="{{status}}"><td><a href="#L{{line}}">{{position}}</a></td><td>{{binding}}</td><td>{{syntax}}</td><td>{{hits}}</td></tr>
+{{/statements}}
+</tbody></table>
+{{#scriptCounters}}
+<h2>Inline script functions and branches</h2><table><thead><tr><th>Line:column</th><th>Kind</th><th>Name / type</th><th>Executions</th></tr></thead><tbody>
+{{#rows}}
+<tr class="{{status}}"><td><a href="#L{{line}}">{{position}}</a></td><td>{{kind}}</td><td>{{label}}</td><td>{{hits}}</td></tr>
+{{/rows}}
+</tbody></table>
+{{/scriptCounters}}
+{{#references}}
+<h2>PHP output and child templates</h2><p>These links describe rendered output. Execution counters stay in each child template; rendering alone does not cover a statement. Additional generated code without mapped counters is not assigned invented source locations.</p><table><thead><tr><th>Source line</th><th>Output</th><th>Source attribution</th></tr></thead><tbody>
+{{#rows}}
+<tr><td><a href="#L{{line}}">{{line}}</a></td><td>{{status}}</td><td>{{reason}}{{#targets}}<br><a href="{{link}}">{{label}}</a>{{/targets}}</td></tr>
+{{/rows}}
+</tbody></table>
+{{/references}}
