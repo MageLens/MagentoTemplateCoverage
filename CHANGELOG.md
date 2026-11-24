@@ -6,6 +6,10 @@ License: see LICENSE in the repository root.
 
 # Changelog
 
+## 2.1.4 - 2026-11-24
+
+- Deduplicate Alpine directive rebinds in the same mutation batch and retain template attribution through morphdom updates. Regenerate instrumented copies to use binding markers that survive attribute reordering.
+
 ## 2.1.3 - 2026-11-24
 
 - Preserve Alpine template coverage when an existing element's bindings are rebound after a morphdom update.

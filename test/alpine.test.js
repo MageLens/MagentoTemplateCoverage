@@ -78,7 +78,7 @@ test('CSP component paths retain PHP-generated identifier suffixes and original 
     const source = '<section x-data="component<?= (int) $id ?>"><span x-text="name"></span></section>';
     const result = analyzeStatements(source, id, 'alpine', {phtml: true});
     assert.equal((result.unsupported || []).length, 0);
-    assert.match(result.content, /x-data="component<\?= \(int\) \$id \?>" data-mtc-binding-0=""/);
+    assert.match(result.content, /x-data="component<\?= \(int\) \$id \?>" data-mtc-binding-0="x-data"/);
     assert.ok(!result.content.includes('__mtcTemplateHit'));
     assert.equal(result.content.split('\n').length, source.split('\n').length);
 });
@@ -110,7 +110,7 @@ test('PHP event names retain complete names, modifiers, offsets and conditional 
         const baseline = render(source), instrumented = render(result.content);
         assert.equal(instrumented.includes('@update-prices-'), Boolean(productId));
         assert.match(instrumented, /x-mtc="[^"]+"/);
-        assert.equal(instrumented.replace(/ x-mtc="[^"]+"| data-mtc-binding-\d+=""/g, ''), baseline);
+        assert.equal(instrumented.replace(/ x-mtc="[^"]+"| data-mtc-binding-\d+="[^"]*"/g, ''), baseline);
     }
 });
 
