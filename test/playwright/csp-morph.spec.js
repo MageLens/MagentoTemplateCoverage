@@ -9,7 +9,7 @@ const fs = require('node:fs');
 const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
-const {createManifest, instrument} = require('../../lib');
+const {createManifest, instrument, merge, writeReport} = require('../../lib');
 const {browserSource} = require('../../lib/browser-source');
 const fixture = require('../csp-fixture');
 
@@ -24,7 +24,13 @@ const source = `<?php declare(strict_types=1); $mode = $argv[1] ?? ''; $event = 
         <span class="row" x-text="item.label"></span>
     </template>
     <div id="details" x-show="visible" :title="title">Details</div>
-    <div id="extract" x-data="extractTitle" x-bind:title="title"></div>
+    <div id="extract" x-data="extractTitle" x-bind:title="title<?= $mode === 'alternate-title' ? 'B' : '' ?>"></div>
+    <?php if ($mode === 'php-handler'): ?><button id="php-handler" x-on:click="<?= 'increment' ?>">PHP handler</button><?php endif; ?>
+    <?php if ($mode === 'late-reactive'): ?>
+    <input id="model" x-model="nameModel">
+    <template id="conditional" x-if="visible"><span id="shown">Visible</span></template>
+    <div id="html" x-html="html"></div>
+    <?php endif; ?>
 </section>`;
 const shell = body => `<!doctype html>
 <script defer src="/alpine-csp.js"></script><script src="/morphdom.js"></script>
@@ -37,10 +43,14 @@ document.addEventListener('alpine:init', () => {
     Alpine.data('probeState', () => ({
         count: 0,
         handled: 'none',
+        name: 'initial',
+        init() { this.nameModel = {get: () => this.name, set: value => { this.name = value; }}; },
         rows: [{id: 1, label: 'initial'}],
         rowsNext: [{id: 2, label: 'two'}, {id: 3, label: 'three'}],
         get visible() { return this.count > 0; },
         get title() { return 'count ' + this.count; },
+        get titleB() { return 'incoming ' + this.count; },
+        get html() { return '<b>count ' + this.count + '</b>'; },
         get alternateTitle() { return 'alternate ' + this.count; },
         increment() { this.count++; this.handled = 'original'; },
         incrementAlternate() { this.count++; this.handled = 'alternate'; },
@@ -418,4 +428,128 @@ test('retained elements keep bounded cleanup state through repeated rebinds', as
     expect(counts.bind).toBeLessThanOrEqual(2);
     expect(counts.prepare).toBeLessThanOrEqual(1);
     expect(counts.scope).toBeLessThanOrEqual(1);
+});
+
+for (const collect of [true, false]) {
+    test(`nested bindings resolve a live root stack once per lookup with collection ${collect}`, async ({page, site}) => {
+        await open(page, site, collect, true);
+        const reads = await page.locator('#component').evaluate(async root => {
+            const leaves = [];
+            for (const depth of [4, 8, 12]) {
+                let node = root;
+                for (let index = 0; index < depth; index++) {
+                    const child = document.createElement('div');
+                    child.setAttribute(':title', 'title');
+                    node.append(child);
+                    node = child;
+                }
+                leaves.push(node);
+            }
+            await new Promise(resolve => requestAnimationFrame(resolve));
+            const original = Object.getOwnPropertyDescriptor(root, '_x_dataStack');
+            let reads = 0;
+            const changed = [{scopeProbe: 'current'}, ...root._x_dataStack];
+            Object.defineProperty(root, '_x_dataStack', {configurable: true, get() { reads++; return changed; }});
+            try {
+                return leaves.map(leaf => {
+                    reads = 0;
+                    const value = Alpine.$data(leaf).scopeProbe;
+                    return {reads, value};
+                });
+            } finally {
+                Object.defineProperty(root, '_x_dataStack', original);
+            }
+        });
+        expect(reads).toEqual(Array.from({length: 3}, () => ({reads: 2, value: 'current'})));
+    });
+
+    test(`a complete PHP handler stays valid under CSP with collection ${collect}`, async ({page, site}) => {
+        await open(page, site, collect);
+        const errors = [];
+        page.on('pageerror', error => errors.push(error.message));
+        page.on('console', message => {
+            if (/^Alpine (?:Error|Expression Error):/.test(message.text())) errors.push(message.text());
+        });
+        const response = await page.goto(site.url + '/a.html?mode=php-handler');
+        expect(await response.text()).toMatch(/<button id="php-handler" x-on:click="increment">/);
+        await page.locator('#php-handler').click();
+        await expect(page.locator('#count')).toHaveText('1');
+        expect(errors).toEqual([]);
+        const entry = site.manifest.templates.find(entry => entry.path.endsWith('/a.phtml'));
+        expect(entry.unsupportedDirectives).toEqual(expect.arrayContaining([
+            expect.stringMatching(/PHP-generated Alpine binding expression.*x-on:click/)
+        ]));
+    });
+}
+
+test('same-task stored prop reads only credit a matching expression', async ({page, site}) => {
+    await open(page, site);
+    const keys = site.manifest.templates.map(entry => {
+        const binding = entry.statements.find(statement => statement.binding === 'x-bind:title');
+        return `${entry.id}:${binding.id}`;
+    });
+    const changeAndRead = async url => {
+        const target = await (await page.request.get(site.url + url)).text();
+        return page.locator('#extract').evaluate((element, {target, keys}) => {
+            const incoming = new DOMParser().parseFromString(target, 'text/html').getElementById(element.id);
+            if (window.morphdom(element, incoming) !== element) throw new Error('Morph replaced the element');
+            const before = keys.map(key => window.templateHits[key] ?? 0);
+            const value = Alpine.extractProp(element, 'title');
+            return {value, hits: keys.map((key, index) => (window.templateHits[key] ?? 0) - before[index])};
+        }, {target, keys});
+    };
+    expect(await changeAndRead('/b.html?mode=alternate-title')).toEqual({value: 'count 0', hits: [0, 0]});
+    await page.goto(site.url + '/b.html?mode=alternate-title');
+    await expect.poll(() => page.locator('#extract').evaluate(element => Alpine.$data(element).initial)).toBe('incoming 0');
+    const markerOnly = await changeAndRead('/a.html?mode=alternate-title');
+    expect(markerOnly.value).toBe('incoming 0');
+    expect(markerOnly.hits[0]).toBeGreaterThan(0);
+    expect(markerOnly.hits[1]).toBe(0);
+});
+
+test('distinct bound expressions retain no per-expression getters', async ({page, site}) => {
+    await open(page, site, true, true);
+    const result = await page.locator('#details').evaluate(async element => {
+        const getters = () => element._x_dataStack.flatMap(Object.getOwnPropertyNames)
+            .filter(name => name.startsWith('__mtc_binding_')).length;
+        const before = getters();
+        const earlier = element._x_inlineBindings.title.expression;
+        const component = Alpine.$data(element.parentElement);
+        for (let index = 0; index < 50; index++) {
+            component['title' + index] = 'value ' + index;
+            element.setAttribute(':title', 'title' + index);
+            await new Promise(resolve => queueMicrotask(resolve));
+        }
+        return {before, after: getters(), earlier: Alpine.evaluate(element, earlier)};
+    });
+    await expect(page.locator('#details')).toHaveAttribute('title', 'value 49');
+    expect(result.earlier).toBe('count 0');
+    expect(result.after).toBeLessThanOrEqual(result.before);
+});
+
+test('the report discloses the late-marker gap for model, if, for and html', async ({page, site}, info) => {
+    await open(page, site, true, true);
+    await page.goto(site.url + '/a.html?plain&mode=late-reactive');
+    const replacement = await (await page.request.get(site.url + '/a.html?mode=late-reactive')).text();
+    for (const id of ['model', 'conditional', 'list', 'html']) await morph(page.locator('#' + id), replacement);
+    await page.locator('#model').fill('edited');
+    const component = page.locator('#component');
+    expect(await component.evaluate(element => Alpine.$data(element).name)).toBe('edited');
+    await component.evaluate(element => Alpine.$data(element).rows.push({id: 9, label: 'added'}));
+    await page.locator('#probe').click();
+    await expect(page.locator('#shown')).toBeVisible();
+    await expect(page.locator('.row')).toHaveText(['initial', 'added']);
+    await expect(page.locator('#html b')).toHaveText('count 1');
+    const directiveNames = ['x-model', 'x-if', 'x-for', 'x-html'];
+    for (const name of directiveNames) expect(await hits(page, site, 'a', name)).toBe(0);
+    const entry = site.manifest.templates.find(entry => entry.path.endsWith('/a.phtml'));
+    const report = info.outputPath('report');
+    writeReport(merge(site.manifest, []), report);
+    const html = fs.readFileSync(path.join(report, 'files', entry.id + '.html'), 'utf8');
+    const json = JSON.parse(fs.readFileSync(path.join(report, 'coverage-summary.json'), 'utf8'));
+    const notes = json.templates.find(template => template.id === entry.id).measurementLimitations;
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toContain('markers are added after');
+    for (const name of directiveNames) expect(notes[0]).toContain(name);
+    expect(html).toContain(notes[0]);
 });

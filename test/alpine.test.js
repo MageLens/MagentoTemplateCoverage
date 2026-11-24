@@ -83,6 +83,16 @@ test('CSP component paths retain PHP-generated identifier suffixes and original 
     assert.equal(result.content.split('\n').length, source.split('\n').length);
 });
 
+test('unclassified PHP-generated bindings keep their source and a measurement limitation', () => {
+    for (const expression of ['<?= $handler ?>', '&#32;<?= $handler ?>', '<?= $provider ?>.increment']) {
+        const source = `<button x-on:click="${expression}">Increment</button>`;
+        const result = analyzeStatements(source, id, 'alpine', {phtml: true});
+        assert.equal(result.content, source);
+        assert.deepEqual(result.statements, []);
+        assert.deepEqual(result.unsupported, ['Unsupported PHP-generated Alpine binding expression for x-on:click at line 1']);
+    }
+});
+
 test('PHP event names retain complete names, modifiers, offsets and conditional attributes', () => {
     const source = `<?php declare(strict_types=1); $productId = 42; ?>
 <section
