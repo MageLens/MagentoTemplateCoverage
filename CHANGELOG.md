@@ -6,7 +6,7 @@ License: see LICENSE in the repository root.
 
 # Changelog
 
-## Unreleased
+## 2.1.2 - 2026-11-24
 
 - Preserve Alpine property-path behavior in instrumented pages opened outside a coverage context, including Hyvä CSP. Regenerate instrumented template copies after upgrading.
 
