@@ -37,6 +37,7 @@ const source = `<?php declare(strict_types=1); $mode = $argv[1] ?? ''; $event = 
     <div id="html" x-html="html"></div>
     <?php endif; ?>
     <?php if ($mode === 'parent-model'): ?><input id="parent-model" x-model.parent="nameModel"><?php endif; ?>
+    <?php if ($mode === 'dotted-getters'): ?><button id="dotted-getters" :title="descriptor.label">Dotted title</button><?php endif; ?>
 </section>`;
 const shell = body => `<!doctype html>
 <script defer src="/alpine-csp.js"></script><script src="/morphdom.js"></script>
@@ -59,6 +60,10 @@ document.addEventListener('alpine:init', () => {
         get titleB() { return 'incoming ' + this.count; },
         get html() { return '<b>count ' + this.count + '</b>'; },
         get alternateTitle() { return 'alternate ' + this.count; },
+        get descriptor() {
+            let reads = 0;
+            return {get label() { return ++reads; }};
+        },
         increment() { this.count++; this.handled = 'original'; },
         incrementAlternate() { this.count++; this.handled = 'alternate'; },
         incrementIntermediate() { this.count++; this.handled = 'intermediate'; }
@@ -343,6 +348,20 @@ test('an active .once listener and reactive text collect after their first marke
 });
 
 for (const collect of [true, false]) {
+    test(`CSP dotted bindings preserve property access order with collection ${collect}`, async ({page, site}) => {
+        await open(page, site, collect);
+        await page.goto(site.url + '/a.html?mode=dotted-getters');
+        const button = page.locator('#dotted-getters');
+        await expect(button).toHaveAttribute(':title', 'descriptor.label');
+        await expect(button).toHaveAttribute('title', '2', {timeout: 2000});
+        if (collect) {
+            const entry = site.manifest.templates.find(template => template.path.endsWith('/a.phtml'));
+            const statement = entry.statements.find(statement => statement.binding === ':title' &&
+                source.split('\n')[statement.start.line - 1].includes('descriptor.label'));
+            expect(await page.evaluate(key => window.templateHits[key] ?? 0, `${entry.id}:${statement.id}`)).toBeGreaterThan(0);
+        }
+    });
+
     test(`CSP keyed loops retain attribution when an alias is named $el with collection ${collect}`, async ({page, site}) => {
         await open(page, site, collect);
         const errors = [];

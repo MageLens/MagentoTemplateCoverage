@@ -10,6 +10,7 @@ const {analyzeStatements} = require('../../lib/statements');
 const {browserSource} = require('../../lib/browser-source');
 
 const cdn = fs.readFileSync(require.resolve('alpinejs').replace(/module.cjs.js$/, 'cdn.js'), 'utf8');
+const morphdom = fs.readFileSync(require.resolve('morphdom/dist/morphdom-umd.js'), 'utf8');
 const memo = 'var evaluatorMemo = {};';
 const countedCdn = cdn.replace(memo, memo + '\nwindow.alpineMemoSize = () => Object.keys(evaluatorMemo).length;');
 const origin = 'http://mtc-cache.test';
@@ -26,6 +27,8 @@ async function open(page, collect, markup = site) {
     await page.route(origin + '/**', async route => {
         if (route.request().url() === origin + '/alpine.js') {
             await route.fulfill({contentType: 'application/javascript', body: countedCdn});
+        } else if (route.request().url() === origin + '/morphdom.js') {
+            await route.fulfill({contentType: 'application/javascript', body: morphdom});
         } else await route.fulfill({contentType: 'text/html', body: markup});
     });
     await page.goto(origin + '/');
@@ -33,6 +36,36 @@ async function open(page, collect, markup = site) {
 }
 
 for (const collect of [true, false]) {
+    test(`a morphed binding forgets its removed component scope with collection ${collect}`, async ({page}) => {
+        await open(page, collect, site + `
+            <script src="/morphdom.js"></script>
+            <script>
+                const reviewLabel = 'global';
+                document.addEventListener('alpine:init', () => {
+                    const component = Alpine.reactive({});
+                    Alpine.data('reviewComponent', () => component);
+                    window.overrideReviewLabel = () => { component.reviewLabel = 'component'; };
+                });
+            </script>
+            <section x-data>
+                <button id="retained" x-data="reviewComponent" :title="reviewLabel">Retained</button>
+            </section>
+        `);
+        const button = page.locator('#retained');
+        await expect(button).toHaveAttribute('title', 'global');
+        await page.evaluate(() => window.overrideReviewLabel());
+        await expect(button).toHaveAttribute('title', 'component');
+        await button.evaluate(element => {
+            const original = '<button id="retained">Retained</button>';
+            const rebound = '<button id="retained" :title="reviewLabel">Retained</button>';
+            for (const markup of [original, rebound]) {
+                if (window.morphdom(element, markup) !== element) throw new Error('Morph replaced the button');
+            }
+        });
+        await expect(button).not.toHaveAttribute('x-data');
+        await expect(button).toHaveAttribute('title', 'global', {timeout: 2000});
+    });
+
     test(`promised global bindings reach the DOM with collection ${collect}`, async ({page}) => {
         await open(page, collect, site + `
             <script>
