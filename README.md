@@ -182,11 +182,13 @@ and `modifyObstructiveCode: false` in the Cypress configuration. Cypress adds it
 own script nonce and removes some directives; use Playwright when you need to test
 the unmodified policy. See [Cypress CSP behavior](https://docs.cypress.io/app/references/content-security-policy).
 
-Instrumented Alpine property paths use the reserved `x-mtc` directive and require
-the package runtime before Alpine starts. The collection adapters install it
-automatically. `withTemplateCoverage` also keeps auxiliary `browser.newContext()`
-contexts functional, including worker-scoped login fixtures, without recording
-their setup activity. For a separate warm-up browser that must not record coverage:
+Instrumented Alpine property paths retain their original expressions, so they
+remain usable in a browser without the coverage runtime. The collection adapters
+install the runtime before Alpine starts to count evaluation. Regenerate
+instrumented copies after upgrading. `withTemplateCoverage` keeps auxiliary
+`browser.newContext()` contexts, including worker-scoped login fixtures, outside
+recorded coverage. To install the runtime without recording coverage in a separate
+warm-up browser:
 
 ```js
 // Playwright: register before navigating any page in this context.

@@ -29,7 +29,8 @@ const test = withTemplateCoverage(base).extend({
 <template x-for="item in items"><span class="item" x-text="item"></span></template>
 <div id="initialized" x-init="let value = 3; $el.dataset.value = value"></div>
 <button id="unused-event" @click="count = 100">Unused</button>
-<input type="radio" id="radio-a" value="a" x-model="choice"><input type="radio" id="radio-b" value="b" x-model="choice">
+<input type="radio" id="radio-a" value="a" x-model="choice">
+<input type="radio" id="radio-b" value="b" x-model="choice">
 <a href="/second.html">Next</a>
 </section>`,
             'knockout.html': '<section id="ko"><input id="ko-input" data-bind="textInput: name"><span id="ko-output" data-bind="text: name"></span></section><script>ko.applyBindings({name:ko.observable("original")},document.getElementById("ko"))</script>',
@@ -199,6 +200,9 @@ test.afterAll(async ({fixture}) => {
     const first = records.find(record => record.test.at(-1).startsWith('Alpine executes'));
     const second = records.find(record => record.test.at(-1).startsWith('new contexts'));
     assert.equal(first.hits[entry.id][line('id="increment"').id], 1);
+    for (const radio of ['radio-a', 'radio-b']) {
+        assert.ok(first.hits[entry.id][line(`id="${radio}"`, 'x-model').id] > 0, `Missing model hits for ${radio}`);
+    }
     assert.equal(second.hits[entry.id][line('id="increment"').id] || 0, 0);
     assert.equal(first.hits[entry.id][line('id="never"', 'x-text').id] || 0, 0);
     assert.equal(first.hits[entry.id][line('id="unused-event"').id] || 0, 0);

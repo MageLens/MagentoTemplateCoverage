@@ -6,6 +6,10 @@ License: see LICENSE in the repository root.
 
 # Changelog
 
+## Unreleased
+
+- Preserve Alpine property-path behavior in instrumented pages opened outside a coverage context, including Hyvä CSP. Regenerate instrumented template copies after upgrading.
+
 ## 2.1.1 - 2026-11-21
 
 - Correct the package repository URL after the repository rename so npm trusted publishing can verify provenance.
