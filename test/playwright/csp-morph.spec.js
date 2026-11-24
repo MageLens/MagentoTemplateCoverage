@@ -31,6 +31,7 @@ const source = `<?php declare(strict_types=1); $mode = $argv[1] ?? ''; $event = 
     <template id="conditional" x-if="visible"><span id="shown">Visible</span></template>
     <div id="html" x-html="html"></div>
     <?php endif; ?>
+    <?php if ($mode === 'parent-model'): ?><input id="parent-model" x-model.parent="nameModel"><?php endif; ?>
 </section>`;
 const shell = body => `<!doctype html>
 <script defer src="/alpine-csp.js"></script><script src="/morphdom.js"></script>
@@ -552,4 +553,44 @@ test('the report discloses the late-marker gap for model, if, for and html', asy
     expect(notes[0]).toContain('markers are added after');
     for (const name of directiveNames) expect(notes[0]).toContain(name);
     expect(html).toContain(notes[0]);
+});
+
+for (const collect of [true, false]) {
+    test(`Hyvä CSP parent model stays native with collection ${collect}`, async ({page, site}) => {
+        await open(page, site, collect);
+        const errors = [];
+        page.on('pageerror', error => errors.push(error.message));
+        page.on('console', message => {
+            if (/^Alpine (?:Error|Expression Error):/.test(message.text())) errors.push(message.text());
+        });
+        const response = await page.goto(site.url + '/a.html?mode=parent-model');
+        expect(response.headers()['content-security-policy']).toBe(fixture.policy);
+        const input = page.locator('#parent-model');
+        await expect(input).toHaveValue('initial', {timeout: 2000});
+        await input.fill('edited');
+        expect(await page.locator('#component').evaluate(element => Alpine.$data(element).name)).toBe('edited');
+        expect(errors).toEqual([]);
+        expect(await response.text()).toContain('<input id="parent-model" x-model.parent="nameModel">');
+        const entry = site.manifest.templates.find(template => template.path.endsWith('/a.phtml'));
+        expect(entry.statements.some(statement => statement.binding === 'x-model.parent')).toBe(false);
+        expect(entry.unsupportedDirectives).toContainEqual(expect.stringContaining('Unsupported Alpine x-model.parent'));
+    });
+}
+
+test('legacy parent-model markers leave the native binding usable', async ({page, site}) => {
+    await page.addInitScript(() => {
+        document.addEventListener('alpine:init', () => {
+            const input = document.getElementById('parent-model');
+            if (!input) return;
+            input.setAttribute('x-mtc', 'a'.repeat(32) + ':0');
+            input.setAttribute('data-mtc-binding-0', 'x-model.parent');
+        });
+    });
+    await open(page, site);
+    await page.goto(site.url + '/a.html?mode=parent-model');
+    const input = page.locator('#parent-model');
+    await expect(input).toHaveValue('initial');
+    await input.fill('edited');
+    expect(await page.locator('#component').evaluate(element => Alpine.$data(element).name)).toBe('edited');
+    expect(await page.evaluate(() => window.templateHits['a'.repeat(32) + ':0'] ?? 0)).toBe(0);
 });

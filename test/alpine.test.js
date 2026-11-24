@@ -64,6 +64,16 @@ test('dynamic PHP model expressions stay unchanged with an explicit limitation',
     assert.equal(result.unsupported.length, 1);
 });
 
+test('parent models preserve their expressions and are reported as unsupported', () => {
+    for (const directive of ['x-model.parent', 'x-model.lazy.parent', 'x-model.parent.number']) {
+        const source = `<input ${directive}="nameModel">`;
+        const result = analyzeStatements(source, id, 'alpine');
+        assert.equal(result.content, source);
+        assert.deepEqual(result.statements, []);
+        assert.match(result.unsupported[0], /Unsupported Alpine x-model\.parent at line 1/);
+    }
+});
+
 
 test('standalone Alpine initialization and HTML directives are discovered', () => {
     for (const [attribute, syntax] of [['x-init="initialize()"', 'alpine:init'], ['x-html="content"', 'alpine:html'], ['x-html-safe="content"', 'alpine:html-safe']]) {
