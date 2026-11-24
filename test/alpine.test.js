@@ -103,7 +103,7 @@ test('PHP event names retain complete names, modifiers, offsets and conditional 
     ]);
     assert.deepEqual(result.statements.map(s => s.start.line), [3, 4, 4, 5, 6]);
     const php = text => maskPhp(text).ranges.map(([start, end]) => text.slice(start, end));
-    assert.deepEqual(php(result.content).filter(code => code !== '<?php ob_start(); ?>' && !code.includes('$__mtcAlpineName_')), php(source));
+    assert.deepEqual(php(result.content).filter(code => !code.includes('$__mtcAlpineName_')), php(source));
     assert.equal(result.content.split('\n').length, source.split('\n').length);
     for (const productId of [42, 0]) {
         const render = text => execFileSync('php', ['-n'], {input: text.replace('$productId = 42', `$productId = ${productId}`), encoding: 'utf8'});
@@ -123,6 +123,34 @@ test('a PHP-generated Alpine event name is rendered once and normalized in its m
     assert.match(instrumented, /data-mtc-binding-0="@evt-1\.window"/);
     assert.equal(instrumented.replace(/ x-mtc="[^"]+"| data-mtc-binding-0="[^"]*"/g, ''), render(source));
     assert.equal(result.content.split('\n').length, source.split('\n').length);
+});
+
+test('a throwing PHP event name leaves the template renderer buffer balanced', t => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'mtc-php-event-'));
+    t.after(() => fs.rmSync(directory, {recursive: true, force: true}));
+    const source = '<button x-on:evt-<?= $eventName() ?>="add">Add</button>';
+    const instrumented = analyzeStatements(source, id, 'alpine', {phtml: true}).content;
+    const driver = `
+        $before = ob_get_level();
+        $failure = new RuntimeException('event name unavailable');
+        $eventName = function () use ($failure) { throw $failure; };
+        try {
+            ob_start();
+            try { include $argv[1]; }
+            catch (Throwable $error) { ob_end_clean(); throw $error; }
+            ob_end_clean();
+        } catch (Throwable $error) {
+            $after = ob_get_level();
+            while (ob_get_level() > $before) ob_end_clean();
+            echo json_encode(['delta' => $after - $before, 'sameError' => $error === $failure]);
+        }
+    `;
+    for (const content of [source, instrumented]) {
+        const file = path.join(directory, 'button.phtml');
+        fs.writeFileSync(file, content);
+        const result = JSON.parse(execFileSync('php', ['-n', '-r', driver, file], {encoding: 'utf8'}));
+        assert.deepEqual(result, {delta: 0, sameError: true});
+    }
 });
 
 test('modifier-only listeners have no expression to instrument, while malformed expressions remain visible', () => {

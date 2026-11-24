@@ -15,8 +15,9 @@ const fixture = require('../csp-fixture');
 
 const source = `<?php declare(strict_types=1); $mode = $argv[1] ?? ''; $event = $argv[2] ?? '1'; ?>
 <section id="component" x-data="probeState">
-    <button id="probe" <?php if ($mode !== 'off'): ?>x-on:click="increment<?= $mode === 'alternate' ? 'Alternate' : ($mode === 'intermediate' ? 'Intermediate' : '') ?>"<?php endif; ?>>Increment</button>
+    <button id="probe" data-boot <?php if ($mode !== 'off'): ?>x-on:click="increment<?= $mode === 'alternate' ? 'Alternate' : ($mode === 'intermediate' ? 'Intermediate' : '') ?>"<?php endif; ?>>Increment</button>
     <button id="once" x-on:click.once="increment">Increment once</button>
+    <button id="aliases" @click="increment" x-on:click="incrementAlternate">Both click directives</button>
     <button x-on:evt-<?= (int)$event ?>="increment" id="event">Generated event</button>
     <output id="count" x-text="count"></output><output id="handled" x-text="handled"></output>
 </section>`;
@@ -239,4 +240,74 @@ test('introducing a marker does not re-arm an untracked .once listener', async (
     await button.click();
     await expect(page.locator('#count')).toHaveText('1');
     expect(await hits(page, site, 'a', 'x-on:click.once')).toBe(0);
+});
+
+for (const collect of [true, false]) {
+    test(`first marker preserves listener order ${collect ? 'with' : 'without'} coverage`, async ({page, site}) => {
+        await open(page, site, collect, true);
+        const button = page.locator('#probe');
+        expect(await button.evaluate(element => {
+            const undo = Alpine.addScopeToNode(element.parentElement, {scopeProbe: true});
+            try { return Alpine.$data(element).scopeProbe; }
+            finally { undo(); }
+        })).toBe(true);
+        await button.evaluate(element => {
+            element.addEventListener('click', event => event.stopImmediatePropagation());
+        });
+        await morph(button, await (await page.request.get(site.url + '/a.html')).text());
+        await button.click();
+        await expect(page.locator('#count')).toHaveText('1', {timeout: 2000});
+        if (collect) expect(await hits(page, site, 'a')).toBeGreaterThan(0);
+    });
+
+    test(`first marker preserves both click aliases ${collect ? 'with' : 'without'} coverage`, async ({page, site}) => {
+        await open(page, site, collect, true);
+        const button = page.locator('#aliases');
+        await morph(button, await (await page.request.get(site.url + '/a.html')).text());
+        await button.click();
+        await expect(page.locator('#count')).toHaveText('2', {timeout: 2000});
+        await expect(page.locator('#handled')).toHaveText('alternate');
+        if (collect) {
+            const entry = site.manifest.templates.find(template => template.path.endsWith('/a.phtml'));
+            const clickIds = entry.statements.filter(statement =>
+                entry.source.split('\n')[statement.start.line - 1].includes('id="aliases"')).map(statement => statement.id);
+            expect(clickIds).toHaveLength(2);
+            for (const id of clickIds) {
+                expect(await page.evaluate(key => window.templateHits[key] ?? 0, `${entry.id}:${id}`)).toBeGreaterThan(0);
+            }
+        }
+    });
+}
+
+test('removing an unrelated attribute before binding retains click coverage', async ({page, site}) => {
+    await page.addInitScript(() => {
+        document.addEventListener('alpine:init', () => Alpine.interceptInit(element => {
+            if (element.id === 'probe') element.removeAttribute('data-boot');
+        }));
+    });
+    await open(page, site);
+    const button = page.locator('#probe');
+    await expect(button).not.toHaveAttribute('data-boot');
+    await button.click();
+    await expect(page.locator('#count')).toHaveText('1');
+    expect(await hits(page, site, 'a')).toBeGreaterThan(0);
+});
+
+test('an active .once listener and reactive text collect after their first markers', async ({page, site}) => {
+    await open(page, site, true, true);
+    const replacement = await (await page.request.get(site.url + '/a.html')).text();
+    const button = page.locator('#once');
+    const count = page.locator('#count');
+    await morph(button, replacement);
+    await morph(count, replacement);
+    expect(await hits(page, site, 'a', 'x-on:click.once')).toBe(0);
+    expect(await hits(page, site, 'a', 'x-text')).toBe(0);
+    await button.click();
+    await expect(count).toHaveText('1');
+    const onceHits = await hits(page, site, 'a', 'x-on:click.once');
+    expect(onceHits).toBeGreaterThan(0);
+    expect(await hits(page, site, 'a', 'x-text')).toBeGreaterThan(0);
+    await button.click();
+    await expect(count).toHaveText('1');
+    expect(await hits(page, site, 'a', 'x-on:click.once')).toBe(onceHits);
 });

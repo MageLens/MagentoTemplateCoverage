@@ -109,6 +109,26 @@ test('new contexts reset hits and collect popups and frames', async ({page, cont
     await expect(page.frameLocator('iframe').locator('#count')).toHaveText('0');
 });
 
+test('unmarked Alpine directives retain native literals, globals and event arguments', async ({page}) => {
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await page.goto('/alpine.html');
+    await page.evaluate(() => {
+        window.lateMarkerText = async () => 'page global';
+        window.lateMarkerClick = event => { window.lateMarkerTarget = event.target.id; };
+        document.querySelector('section').insertAdjacentHTML('beforeend', `
+            <output id="literal" x-text="true"></output>
+            <output id="global-text" x-text="window.lateMarkerText"></output>
+            <button id="global-click" x-on:click="window.lateMarkerClick">Global click</button>
+        `);
+    });
+    await expect(page.locator('#literal')).toHaveText('true');
+    await expect(page.locator('#global-text')).toHaveText('page global');
+    await page.locator('#global-click').click();
+    expect(await page.evaluate(() => window.lateMarkerTarget)).toBe('global-click');
+    expect(errors).toEqual([]);
+});
+
 test('Playwright also preserves Luma Knockout two-way bindings', async ({page}) => {
     await page.goto('/knockout.html');
     await page.locator('#ko-input').fill('changed');
@@ -183,7 +203,7 @@ test('retains empty and unknown PHP output attribution across navigation', async
 
 test.afterAll(async ({fixture}) => {
     const records = readRecords(path.join(fixture.root, 'hits'));
-    assert.equal(records.length, 9);
+    assert.equal(records.length, 10);
     const child = fixture.manifest.templates.find(entry => entry.path.endsWith('generated-child.phtml'));
     const idle = records.find(record => record.test.at(-1).startsWith('links a PHP-rendered'));
     assert.equal(idle.hits[child.id], undefined);
