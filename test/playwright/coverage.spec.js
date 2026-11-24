@@ -116,16 +116,28 @@ test('unmarked Alpine directives retain native literals, globals and event argum
     await page.evaluate(() => {
         window.lateMarkerText = async () => 'page global';
         window.lateMarkerClick = event => { window.lateMarkerTarget = event.target.id; };
+        window.lateMarkerTitle = 'native title';
+        window.lateMarkerCallback = () => { throw new Error('Extracted callback was invoked'); };
+        Alpine.data('extractFixture', function () {
+            return {callback: Alpine.extractProp(this.$el, 'title')};
+        });
         document.querySelector('section').insertAdjacentHTML('beforeend', `
             <output id="literal" x-text="true"></output>
             <output id="global-text" x-text="window.lateMarkerText"></output>
-            <button id="global-click" x-on:click="window.lateMarkerClick">Global click</button>
+            <button id="global-click" :title="window.lateMarkerTitle" :disabled="undefined"
+                x-on:click="window.lateMarkerClick">Global click</button>
+            <div id="extract-global" x-data="extractFixture" :title="window.lateMarkerCallback"></div>
         `);
     });
     await expect(page.locator('#literal')).toHaveText('true');
     await expect(page.locator('#global-text')).toHaveText('page global');
+    await expect(page.locator('#global-click')).toHaveAttribute('title', 'native title');
+    await expect(page.locator('#global-click')).toBeEnabled();
     await page.locator('#global-click').click();
     expect(await page.evaluate(() => window.lateMarkerTarget)).toBe('global-click');
+    expect(await page.locator('#extract-global').evaluate(element =>
+        Alpine.extractProp(element, 'title') === window.lateMarkerCallback &&
+        Alpine.$data(element).callback === window.lateMarkerCallback)).toBe(true);
     expect(errors).toEqual([]);
 });
 

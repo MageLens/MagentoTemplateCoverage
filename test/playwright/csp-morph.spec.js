@@ -20,15 +20,28 @@ const source = `<?php declare(strict_types=1); $mode = $argv[1] ?? ''; $event = 
     <button id="aliases" @click="increment" x-on:click="incrementAlternate">Both click directives</button>
     <button x-on:evt-<?= (int)$event ?>="increment" id="event">Generated event</button>
     <output id="count" x-text="count"></output><output id="handled" x-text="handled"></output>
+    <template id="list" x-for="item in rows<?= $mode === 'rows' ? 'Next' : '' ?>" :key="item.id">
+        <span class="row" x-text="item.label"></span>
+    </template>
+    <div id="details" x-show="visible" :title="title">Details</div>
+    <div id="extract" x-data="extractTitle" x-bind:title="title"></div>
 </section>`;
 const shell = body => `<!doctype html>
 <script defer src="/alpine-csp.js"></script><script src="/morphdom.js"></script>
 ${body}
 <script nonce="mtc-fixture">
 document.addEventListener('alpine:init', () => {
+    Alpine.data('extractTitle', function () {
+        return {initial: Alpine.extractProp(this.$el, 'title')};
+    });
     Alpine.data('probeState', () => ({
         count: 0,
         handled: 'none',
+        rows: [{id: 1, label: 'initial'}],
+        rowsNext: [{id: 2, label: 'two'}, {id: 3, label: 'three'}],
+        get visible() { return this.count > 0; },
+        get title() { return 'count ' + this.count; },
+        get alternateTitle() { return 'alternate ' + this.count; },
         increment() { this.count++; this.handled = 'original'; },
         incrementAlternate() { this.count++; this.handled = 'alternate'; },
         incrementIntermediate() { this.count++; this.handled = 'intermediate'; }
@@ -310,4 +323,99 @@ test('an active .once listener and reactive text collect after their first marke
     await button.click();
     await expect(count).toHaveText('1');
     expect(await hits(page, site, 'a', 'x-on:click.once')).toBe(onceHits);
+});
+
+for (const collect of [true, false]) {
+    test(`stored keyed list expressions survive ${collect ? 'with' : 'without'} coverage`, async ({page, site}) => {
+        const errors = [];
+        page.on('pageerror', error => errors.push(error.message));
+        await open(page, site, collect);
+        await expect(page.locator('.row')).toHaveText(['initial']);
+        const before = collect ? await hits(page, site, 'a', ':key') : 0;
+        if (collect) expect(before).toBeGreaterThan(0);
+        const list = page.locator('#list');
+        const replacement = await (await page.request.get(site.url + '/a.html?plain&mode=rows')).text();
+        await morph(list, replacement);
+        await expect(list).toHaveAttribute(':key', 'item.id');
+        await expect(page.locator('.row')).toHaveText(['two', 'three'], {timeout: 2000});
+        if (collect) expect(await hits(page, site, 'a', ':key')).toBe(before);
+        expect(errors).toEqual([]);
+    });
+
+    test(`extractProp can read a stored expression later ${collect ? 'with' : 'without'} coverage`, async ({page, site}) => {
+        const errors = [];
+        page.on('pageerror', error => errors.push(error.message));
+        await open(page, site, collect);
+        await page.locator('#probe').click();
+        const prop = await page.locator('#extract').evaluate(element => Alpine.extractProp(element, 'title'));
+        expect(prop).toBe('count 1');
+        expect(errors).toEqual([]);
+    });
+}
+
+test('marker-only morph credits the current template before Alpine sees mutations', async ({page, site}) => {
+    await open(page, site);
+    const target = await (await page.request.get(site.url + '/b.html')).text();
+    const clickKeys = site.manifest.templates.map(entry => {
+        const click = entry.statements.find(statement => statement.binding === 'x-on:click');
+        return `${entry.id}:${click.id}`;
+    });
+    const inTask = await page.locator('#probe').evaluate((element, {target, clickKeys}) => {
+        const incoming = new DOMParser().parseFromString(target, 'text/html').getElementById(element.id);
+        if (window.morphdom(element, incoming) !== element) throw new Error('Morph replaced the button');
+        element.click();
+        return clickKeys.map(key => window.templateHits[key] ?? 0);
+    }, {target, clickKeys});
+    await expect(page.locator('#count')).toHaveText('1');
+    expect(inTask[0]).toBe(0);
+    expect(inTask[1]).toBeGreaterThan(0);
+    expect(await hits(page, site, 'a')).toBe(0);
+    expect(await hits(page, site, 'b')).toBe(inTask[1]);
+});
+
+test('reactive show and bind collect subsequent evaluations after their first markers', async ({page, site}) => {
+    await open(page, site, true, true);
+    const details = page.locator('#details');
+    await expect(details).toBeHidden();
+    await expect(details).toHaveAttribute('title', 'count 0');
+    const replacement = await (await page.request.get(site.url + '/a.html')).text();
+    await morph(details, replacement);
+    expect(await hits(page, site, 'a', 'x-show')).toBe(0);
+    expect(await hits(page, site, 'a', ':title')).toBe(0);
+    await page.locator('#probe').click();
+    await expect(details).toBeVisible();
+    await expect(details).toHaveAttribute('title', 'count 1');
+    expect(await hits(page, site, 'a', 'x-show')).toBeGreaterThan(0);
+    expect(await hits(page, site, 'a', ':title')).toBeGreaterThan(0);
+});
+
+test('retained elements keep bounded cleanup state through repeated rebinds', async ({page, site}) => {
+    await open(page, site);
+    expect(await page.locator('#details').evaluate(element => {
+        const undo = Alpine.addScopeToNode(element.parentElement, {scopeProbe: true});
+        try { return Alpine.$data(element).scopeProbe; }
+        finally { undo(); }
+    })).toBe(true);
+    const counts = await page.evaluate(async () => {
+        const button = document.getElementById('probe');
+        const details = document.getElementById('details');
+        for (let i = 0; i < 50; i++) {
+            button.setAttribute('x-on:click', i % 2 ? 'increment' : 'incrementAlternate');
+            details.setAttribute(':title', i % 2 ? 'title' : 'alternateTitle');
+            await new Promise(resolve => queueMicrotask(resolve));
+        }
+        const cleanups = (element, name) => element._x_attributeCleanups?.[name]?.length ?? 0;
+        return {
+            click: cleanups(button, 'x-on:click'), bind: cleanups(details, ':title'),
+            prepare: cleanups(button, 'x-mtc-prepare'), scope: cleanups(details, 'x-mtc-scope')
+        };
+    });
+    await page.locator('#probe').click();
+    await expect(page.locator('#details')).toHaveAttribute('title', 'count 1');
+    expect(counts.click).toBeGreaterThan(0);
+    expect(counts.bind).toBeGreaterThan(0);
+    expect(counts.click).toBeLessThanOrEqual(2);
+    expect(counts.bind).toBeLessThanOrEqual(2);
+    expect(counts.prepare).toBeLessThanOrEqual(1);
+    expect(counts.scope).toBeLessThanOrEqual(1);
 });
