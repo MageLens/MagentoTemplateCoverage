@@ -60,7 +60,10 @@ const test = base.extend({
         await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
         try { await use({manifest, url: `http://127.0.0.1:${server.address().port}`}); }
         finally {
-            await new Promise(resolve => server.close(resolve));
+            await new Promise(resolve => {
+                server.close(resolve);
+                server.closeAllConnections();
+            });
             fs.rmSync(root, {recursive: true, force: true});
         }
     }
