@@ -23,6 +23,11 @@ const source = `<?php declare(strict_types=1); $mode = $argv[1] ?? ''; $event = 
     <template id="list" x-for="item in rows<?= $mode === 'rows' ? 'Next' : '' ?>" :key="item.id">
         <span class="row" x-text="item.label"></span>
     </template>
+    <?php if ($mode === 'alias-rows'): ?>
+    <template id="alias-list" x-for="$el in aliasRows" :key="$el.id">
+        <span class="alias-row"></span>
+    </template>
+    <?php endif; ?>
     <div id="details" x-show="visible" :title="title">Details</div>
     <div id="extract" x-data="extractTitle" x-bind:title="title<?= $mode === 'alternate-title' ? 'B' : '' ?>"></div>
     <?php if ($mode === 'php-handler'): ?><button id="php-handler" x-on:click="<?= 'increment' ?>">PHP handler</button><?php endif; ?>
@@ -48,6 +53,7 @@ document.addEventListener('alpine:init', () => {
         init() { this.nameModel = {get: () => this.name, set: value => { this.name = value; }}; },
         rows: [{id: 1, label: 'initial'}],
         rowsNext: [{id: 2, label: 'two'}, {id: 3, label: 'three'}],
+        aliasRows: [{id: 'first'}, {id: 'second'}],
         get visible() { return this.count > 0; },
         get title() { return 'count ' + this.count; },
         get titleB() { return 'incoming ' + this.count; },
@@ -337,6 +343,40 @@ test('an active .once listener and reactive text collect after their first marke
 });
 
 for (const collect of [true, false]) {
+    test(`CSP keyed loops retain attribution when an alias is named $el with collection ${collect}`, async ({page, site}) => {
+        await open(page, site, collect);
+        const errors = [];
+        page.on('pageerror', error => errors.push(error.message));
+        page.on('console', message => {
+            if (/^Alpine (?:Warning|Error|Expression Error):/.test(message.text())) errors.push(message.text());
+        });
+        const response = await page.goto(site.url + '/a.html?mode=alias-rows');
+        expect(await response.text()).toContain(':key="$el.id"');
+        const list = page.locator('#alias-list');
+        const rows = page.locator('.alias-row');
+        await expect(rows).toHaveCount(2);
+        const result = await list.evaluate(async template => {
+            const marker = template.getAttributeNames().find(name => name.startsWith('data-mtc-binding-') &&
+                template.getAttribute(name) === ':key');
+            const key = template.getAttribute('x-mtc').split(':')[0] + ':' + marker.slice('data-mtc-binding-'.length);
+            const hits = () => window.templateHits?.[key] ?? 0;
+            const currentRows = () => [...document.querySelectorAll('.alias-row')];
+            const [first, second] = currentRows();
+            const before = hits();
+            const data = Alpine.$data(template);
+            data.aliasRows = [...data.aliasRows].reverse();
+            await Alpine.nextTick();
+            const [left, right] = currentRows();
+            return {reordered: left === second && right === first, before, after: hits()};
+        });
+        expect(result.reordered).toBe(true);
+        expect(errors).toEqual([]);
+        if (collect) {
+            expect(result.before).toBeGreaterThan(0);
+            expect(result.after).toBeGreaterThan(result.before);
+        }
+    });
+
     test(`stored keyed list expressions survive ${collect ? 'with' : 'without'} coverage`, async ({page, site}) => {
         const errors = [];
         page.on('pageerror', error => errors.push(error.message));

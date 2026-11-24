@@ -16,7 +16,7 @@ const origin = 'http://mtc-cache.test';
 const site = '<!doctype html><script defer src="/alpine.js"></script>' +
     '<main x-data="{title: \'native\'}"><button id="warm" :title="title">Warm</button><div id="mount"></div></main>';
 
-async function open(page, collect) {
+async function open(page, collect, markup = site) {
     expect(countedCdn).not.toBe(cdn);
     if (collect) await page.addInitScript({content: '(() => {' +
         'const hits = window.templateHits = {};\n' +
@@ -26,13 +26,65 @@ async function open(page, collect) {
     await page.route(origin + '/**', async route => {
         if (route.request().url() === origin + '/alpine.js') {
             await route.fulfill({contentType: 'application/javascript', body: countedCdn});
-        } else await route.fulfill({contentType: 'text/html', body: site});
+        } else await route.fulfill({contentType: 'text/html', body: markup});
     });
     await page.goto(origin + '/');
     await expect(page.locator('#warm')).toHaveAttribute('title', 'native');
 }
 
 for (const collect of [true, false]) {
+    test(`promised global bindings reach the DOM with collection ${collect}`, async ({page}) => {
+        await open(page, collect, site + `
+            <script>
+                const deferredTitle = new Promise(resolve => { window.resolveTitle = resolve; });
+                const deferredState = new Promise(() => {});
+                deferredState.title = deferredTitle;
+            </script>
+            <section x-data>
+                <button id="deferred" :title="deferredTitle">Deferred</button>
+                <button id="deferred-property" :title="deferredState.title">Deferred property</button>
+            </section>
+        `);
+        const button = page.locator('#deferred');
+        const property = page.locator('#deferred-property');
+        await expect(button).not.toHaveAttribute('title');
+        await expect(property).not.toHaveAttribute('title');
+        await page.evaluate(() => window.resolveTitle('arrived'));
+        await expect(button).toHaveAttribute('title', 'arrived', {timeout: 2000});
+        await expect(property).toHaveAttribute('title', 'arrived', {timeout: 2000});
+    });
+
+    test(`reactive global bindings keep bounded element cleanup with collection ${collect}`, async ({page}) => {
+        await open(page, collect, site + `
+            <script>
+                let lexicalReviewState;
+                document.addEventListener('alpine:init', () => {
+                    lexicalReviewState = Alpine.reactive({title: 'initial'});
+                    window.reviewState = lexicalReviewState;
+                });
+            </script>
+            <section x-data>
+                <button id="global" :title="window.reviewState.title">Global</button>
+                <button id="lexical" :title="lexicalReviewState.title">Lexical</button>
+            </section>
+        `);
+        const bindings = page.locator('#global, #lexical');
+        await expect(bindings.first()).toHaveAttribute('title', 'initial');
+        await expect(bindings.last()).toHaveAttribute('title', 'initial');
+        const result = await bindings.evaluateAll(async buttons => {
+            const cleanups = () => buttons.map(button => button._x_cleanups?.length ?? 0);
+            const before = cleanups();
+            for (let index = 1; index <= 100; index++) {
+                const title = 'global ' + index;
+                window.reviewState.title = title;
+                await Alpine.nextTick();
+                if (buttons.some(button => button.title !== title)) throw new Error('A reactive title did not update');
+            }
+            return cleanups().map((count, index) => count - before[index]);
+        });
+        expect(result).toEqual([0, 0]);
+    });
+
     test('repeated Alpine bindings reuse evaluator cache entries with collection ' + collect, async ({page}) => {
         await open(page, collect);
         const growth = await page.locator('#mount').evaluate(async mount => {
