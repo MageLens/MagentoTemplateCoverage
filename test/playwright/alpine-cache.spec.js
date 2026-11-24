@@ -16,6 +16,32 @@ const countedCdn = cdn.replace(memo, memo + '\nwindow.alpineMemoSize = () => Obj
 const origin = 'http://mtc-cache.test';
 const site = '<!doctype html><script defer src="/alpine.js"></script>' +
     '<main x-data="{title: \'native\'}"><button id="warm" :title="title">Warm</button><div id="mount"></div></main>';
+const globalBindingPage = site + `
+    <script src="/morphdom.js"></script>
+    <script>
+        let displayState;
+        document.addEventListener('alpine:init', () => {
+            displayState = Alpine.reactive({title: 'global-1'});
+            Alpine.directive('read-display-prop', element => {
+                Alpine.extractProp(element, 'title');
+            }).before('bind');
+        });
+        window.setDisplayTitle = title => { displayState.title = title; };
+        window.morphDisplayParent = (button, data) => {
+            const parent = button.parentElement;
+            const replacement = parent.cloneNode(true);
+            if (data === null) replacement.removeAttribute('x-data');
+            else replacement.setAttribute('x-data', data);
+            if (window.morphdom(parent, replacement) !== parent || !button.isConnected ||
+                parent.firstElementChild !== button) throw new Error('Morph replaced the retained button');
+        };
+    </script>
+    <section x-data>
+        <div>
+            <button id="bound-title" :title="displayState.title">Bound title</button>
+            <button id="extracted-title" x-read-display-prop :title="displayState.title">Extracted title</button>
+        </div>
+    </section>`;
 
 async function open(page, collect, markup = site) {
     expect(countedCdn).not.toBe(cdn);
@@ -36,6 +62,50 @@ async function open(page, collect, markup = site) {
 }
 
 for (const collect of [true, false]) {
+    test(`parent morphs preserve an existing binding and update a fresh prop read with collection ${collect}`, async ({page}) => {
+        await open(page, collect, globalBindingPage);
+        const bound = page.locator('#bound-title');
+        const extracted = page.locator('#extracted-title');
+        await expect(bound).toHaveAttribute('title', 'global-1');
+        expect(await extracted.evaluate(button => Alpine.extractProp(button, 'title'))).toBe('global-1');
+        await bound.evaluate(async button => {
+            window.morphDisplayParent(button, "{displayState: {title: 'local'}}");
+            await Alpine.nextTick();
+        });
+        expect(await extracted.evaluate(button => Alpine.extractProp(button, 'title'))).toBe('local');
+        const titles = await bound.evaluate(async button => {
+            const values = [];
+            for (const title of ['global-2', 'global-3']) {
+                window.setDisplayTitle(title);
+                await Alpine.nextTick();
+                values.push(button.title);
+            }
+            return values;
+        });
+        expect(titles).toEqual(['global-2', 'global-3']);
+        expect(await extracted.evaluate(button => Alpine.extractProp(button, 'title'))).toBe('local');
+    });
+
+    test(`parent morphs keep global binding cleanup bounded with collection ${collect}`, async ({page}) => {
+        await open(page, collect, globalBindingPage);
+        const bound = page.locator('#bound-title');
+        await expect(bound).toHaveAttribute('title', 'global-1');
+        const growth = await bound.evaluate(async button => {
+            const cleanups = () => button._x_cleanups?.length ?? 0;
+            const before = cleanups();
+            for (let index = 0; index < 100; index++) {
+                window.morphDisplayParent(button, index % 2 ? null : '{}');
+                await Alpine.nextTick();
+                const title = 'updated-' + index;
+                window.setDisplayTitle(title);
+                await Alpine.nextTick();
+                if (button.title !== title) throw new Error('The existing binding stopped tracking the global title');
+            }
+            return cleanups() - before;
+        });
+        expect(growth).toBe(0);
+    });
+
     test(`an extracted prop follows its parent after a morph with collection ${collect}`, async ({page}) => {
         await open(page, collect, site + `
             <script src="/morphdom.js"></script>
