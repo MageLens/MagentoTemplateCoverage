@@ -36,6 +36,46 @@ async function open(page, collect, markup = site) {
 }
 
 for (const collect of [true, false]) {
+    test(`an extracted prop follows its parent after a morph with collection ${collect}`, async ({page}) => {
+        await open(page, collect, site + `
+            <script src="/morphdom.js"></script>
+            <script>
+                const persistedLabel = 'global';
+                document.addEventListener('alpine:init', () => {
+                    const component = Alpine.reactive({});
+                    Alpine.data('propParent', () => component);
+                    Alpine.directive('read-prop', element => {
+                        window.initialProp = Alpine.extractProp(element, 'title');
+                    }).before('bind');
+                    window.setParentLabel = () => { component.persistedLabel = 'component'; };
+                });
+            </script>
+            <section x-data>
+                <div id="prop-parent" x-data="propParent">
+                    <button id="prop-child" x-read-prop :title="persistedLabel">Extracted prop</button>
+                </div>
+            </section>
+        `);
+        const child = page.locator('#prop-child');
+        expect(await page.evaluate(() => window.initialProp)).toBe('global');
+        await page.evaluate(() => window.setParentLabel());
+        expect(await child.evaluate(element => Alpine.extractProp(element, 'title'))).toBe('component');
+        const after = await child.evaluate(async element => {
+            const parent = element.parentElement;
+            const replacement = parent.cloneNode(true);
+            replacement.removeAttribute('x-data');
+            window.morphdom(parent, replacement);
+            await Alpine.nextTick();
+            return {
+                retained: parent.firstElementChild === element && !parent.hasAttribute('x-data'),
+                binding: element.getAttribute(':title'),
+                fresh: Alpine.evaluate(element, 'persistedLabel'),
+                extracted: Alpine.extractProp(element, 'title')
+            };
+        });
+        expect(after).toEqual({retained: true, binding: 'persistedLabel', fresh: 'global', extracted: 'global'});
+    });
+
     test(`a morphed binding forgets its removed component scope with collection ${collect}`, async ({page}) => {
         await open(page, collect, site + `
             <script src="/morphdom.js"></script>
