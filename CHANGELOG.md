@@ -6,6 +6,10 @@ License: see LICENSE in the repository root.
 
 # Changelog
 
+## 2.1.3 - 2026-11-24
+
+- Preserve Alpine template coverage when an existing element's bindings are rebound after a morphdom update.
+
 ## 2.1.2 - 2026-11-24
 
 - Preserve Alpine property-path behavior in instrumented pages opened outside a coverage context, including Hyvä CSP. Regenerate instrumented template copies after upgrading.

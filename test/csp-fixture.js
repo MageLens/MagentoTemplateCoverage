@@ -11,7 +11,7 @@ const policy = "default-src 'self'; script-src 'self' 'nonce-mtc-fixture'; objec
 const html = `<?php declare(strict_types=1); $productId = 42; $missing = 0; ?>
 <section x-data="cspFixture" x-init="initialize">
 <input id="name" x-model="nameModel"><output id="echo" x-text="name"></output>
-<button id="increment" @click="increment">Increment</button><output id="count" x-text="count"></output>
+<button id="increment" x-on:click="increment">Increment</button><output id="count" x-text="count"></output>
 <button id="async" @click="asyncIncrement">Async</button><output id="initialized" x-text="initialized"></output>
 <template x-for="item in items" :key="item.id"><span class="item" x-text="item.label"></span></template>
 <template x-if="open"><span id="never" x-text="neverLabel"></span></template>
@@ -50,6 +50,10 @@ function write(directory) {
     fs.writeFileSync(path.join(directory, 'csp.phtml'), html);
 }
 function serve(req, res, copy) {
+    if (req.url === '/morphdom.js') {
+        res.setHeader('Content-Type', 'application/javascript');
+        res.end(fs.readFileSync(require.resolve('morphdom/dist/morphdom-umd.js'))); return true;
+    }
     if (req.url === '/alpine-csp.js') {
         res.setHeader('Content-Type', 'application/javascript');
         res.end(fs.readFileSync(require.resolve('@alpinejs/csp').replace(/module.cjs.js$/, 'cdn.js'))); return true;

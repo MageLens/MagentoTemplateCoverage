@@ -77,7 +77,7 @@ test.afterAll(async ({site}) => {
     const records = readRecords(path.join(site.root, 'hits'));
     expect(records).toHaveLength(1);
     const template = site.manifest.templates.find(entry => entry.path.endsWith('/csp.phtml'));
-    const click = template.statements.find(statement => statement.binding === '@click' && template.source.split('\n')[statement.start.line - 1].includes('id="increment"'));
+    const click = template.statements.find(statement => statement.binding === 'x-on:click');
     expect(click).toBeDefined();
     // Alpine CSP 3.14 reads the method path for its type check and invocation.
     expect(records[0].hits[template.id][click.id]).toBe(2);
