@@ -69,6 +69,20 @@ for (const collect of [true, false]) {
                 const original = new DOMParser().parseFromString(html, 'text/html').getElementById('increment');
                 if (window.morphdom(element, original) !== element) throw new Error('Expected the existing button to be updated');
             }, source);
+            await expect(button).toHaveAttribute('x-on:click', 'increment');
+            const mutations = await button.evaluate(async (element, html) => {
+                let changes = 0;
+                const observer = new MutationObserver(records => { changes += records.length; });
+                observer.observe(element, {attributes: true});
+                for (let repeat = 0; repeat < 8; repeat++) {
+                    const original = new DOMParser().parseFromString(html, 'text/html').getElementById('increment');
+                    if (window.morphdom(element, original) !== element) throw new Error('Morph replaced the button');
+                }
+                await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+                observer.disconnect();
+                return changes;
+            }, source);
+            expect(mutations).toBe(0);
             await button.click();
             await expect(count).toHaveText('1');
             expect(errors).toEqual([]);

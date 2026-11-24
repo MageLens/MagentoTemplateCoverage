@@ -128,9 +128,19 @@ test('report escapes source names and only reads .mtc records alongside Istanbul
     fs.writeFileSync(path.join(hits, 'istanbul.json'), '{}');
     assert.deepEqual(readRecords(hits), [record]);
     const output = path.join(directory, 'report');
-    writeReport(merge(manifest, []), output);
+    const report = merge(manifest, []);
+    const entry = report.templates[0];
+    entry.measurementLimitations = ['Unknown <directive> & "{{title}}"', 'Parent scope'];
+    entry.source = '  <button x-text="{{title}}"> & </button>';
+    writeReport(report, output);
     const html = fs.readFileSync(path.join(output, 'all.html'), 'utf8');
     assert.match(html, /No browser observations collected/);
     assert.match(html, /&lt;script&gt;alert/);
     assert.doesNotMatch(html, /<script>alert/);
+    const detail = fs.readFileSync(path.join(output, 'files', entry.id + '.html'), 'utf8');
+    assert.ok(detail.includes('<td class="code">  &lt;button x-text=&quot;{{title}}&quot;&gt; &amp; &lt;/button&gt;</td>'));
+    for (const page of [html, detail]) {
+        assert.ok(page.includes('Unknown &lt;directive&gt; &amp; &quot;{{title}}&quot; · Parent scope'));
+        assert.doesNotMatch(page, /<directive>/);
+    }
 });

@@ -64,6 +64,16 @@ test('dynamic PHP model expressions stay unchanged with an explicit limitation',
     assert.equal(result.unsupported.length, 1);
 });
 
+test('parent models preserve their expressions and are reported as unsupported', () => {
+    for (const directive of ['x-model.parent', 'x-model.lazy.parent', 'x-model.parent.number']) {
+        const source = `<input ${directive}="nameModel">`;
+        const result = analyzeStatements(source, id, 'alpine');
+        assert.equal(result.content, source);
+        assert.deepEqual(result.statements, []);
+        assert.match(result.unsupported[0], /Unsupported Alpine x-model\.parent at line 1/);
+    }
+});
+
 
 test('standalone Alpine initialization and HTML directives are discovered', () => {
     for (const [attribute, syntax] of [['x-init="initialize()"', 'alpine:init'], ['x-html="content"', 'alpine:html'], ['x-html-safe="content"', 'alpine:html-safe']]) {
@@ -78,9 +88,19 @@ test('CSP component paths retain PHP-generated identifier suffixes and original 
     const source = '<section x-data="component<?= (int) $id ?>"><span x-text="name"></span></section>';
     const result = analyzeStatements(source, id, 'alpine', {phtml: true});
     assert.equal((result.unsupported || []).length, 0);
-    assert.match(result.content, /x-data="component<\?= \(int\) \$id \?>" data-mtc-binding-0=""/);
+    assert.match(result.content, /x-data="component<\?= \(int\) \$id \?>" data-mtc-binding-0="x-data"/);
     assert.ok(!result.content.includes('__mtcTemplateHit'));
     assert.equal(result.content.split('\n').length, source.split('\n').length);
+});
+
+test('unclassified PHP-generated bindings keep their source and a measurement limitation', () => {
+    for (const expression of ['<?= $handler ?>', '&#32;<?= $handler ?>', '<?= $provider ?>.increment']) {
+        const source = `<button x-on:click="${expression}">Increment</button>`;
+        const result = analyzeStatements(source, id, 'alpine', {phtml: true});
+        assert.equal(result.content, source);
+        assert.deepEqual(result.statements, []);
+        assert.deepEqual(result.unsupported, ['Unsupported PHP-generated Alpine binding expression for x-on:click at line 1']);
+    }
 });
 
 test('PHP event names retain complete names, modifiers, offsets and conditional attributes', () => {
@@ -103,14 +123,53 @@ test('PHP event names retain complete names, modifiers, offsets and conditional 
     ]);
     assert.deepEqual(result.statements.map(s => s.start.line), [3, 4, 4, 5, 6]);
     const php = text => maskPhp(text).ranges.map(([start, end]) => text.slice(start, end));
-    assert.deepEqual(php(result.content), php(source));
+    assert.deepEqual(php(result.content).filter(code => !code.includes('$__mtcAlpineName_')), php(source));
     assert.equal(result.content.split('\n').length, source.split('\n').length);
     for (const productId of [42, 0]) {
         const render = text => execFileSync('php', ['-n'], {input: text.replace('$productId = 42', `$productId = ${productId}`), encoding: 'utf8'});
         const baseline = render(source), instrumented = render(result.content);
         assert.equal(instrumented.includes('@update-prices-'), Boolean(productId));
         assert.match(instrumented, /x-mtc="[^"]+"/);
-        assert.equal(instrumented.replace(/ x-mtc="[^"]+"| data-mtc-binding-\d+=""/g, ''), baseline);
+        assert.match(instrumented, new RegExp(`@update-gallery-${productId}\\.window="updateImage" data-mtc-binding-\\d+="@update-gallery-${productId}\\.window"`));
+        assert.equal(instrumented.replace(/ x-mtc="[^"]+"| data-mtc-binding-\d+="[^"]*"/g, ''), baseline);
+    }
+});
+
+test('a PHP-generated Alpine event name is rendered once and normalized in its marker', () => {
+    const source = '<?php $i = 1; ?><div @EVT-<?= $i++ ?>.window\n="add"><?= $i ?></div>';
+    const result = analyzeStatements(source, id, 'alpine', {phtml: true});
+    const render = text => execFileSync('php', ['-n'], {input: text, encoding: 'utf8'});
+    const instrumented = render(result.content);
+    assert.match(instrumented, /data-mtc-binding-0="@evt-1\.window"/);
+    assert.equal(instrumented.replace(/ x-mtc="[^"]+"| data-mtc-binding-0="[^"]*"/g, ''), render(source));
+    assert.equal(result.content.split('\n').length, source.split('\n').length);
+});
+
+test('a throwing PHP event name leaves the template renderer buffer balanced', t => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'mtc-php-event-'));
+    t.after(() => fs.rmSync(directory, {recursive: true, force: true}));
+    const source = '<button x-on:evt-<?= $eventName() ?>="add">Add</button>';
+    const instrumented = analyzeStatements(source, id, 'alpine', {phtml: true}).content;
+    const driver = `
+        $before = ob_get_level();
+        $failure = new RuntimeException('event name unavailable');
+        $eventName = function () use ($failure) { throw $failure; };
+        try {
+            ob_start();
+            try { include $argv[1]; }
+            catch (Throwable $error) { ob_end_clean(); throw $error; }
+            ob_end_clean();
+        } catch (Throwable $error) {
+            $after = ob_get_level();
+            while (ob_get_level() > $before) ob_end_clean();
+            echo json_encode(['delta' => $after - $before, 'sameError' => $error === $failure]);
+        }
+    `;
+    for (const content of [source, instrumented]) {
+        const file = path.join(directory, 'button.phtml');
+        fs.writeFileSync(file, content);
+        const result = JSON.parse(execFileSync('php', ['-n', '-r', driver, file], {encoding: 'utf8'}));
+        assert.deepEqual(result, {delta: 0, sameError: true});
     }
 });
 

@@ -79,6 +79,7 @@ test.afterAll(async ({site}) => {
     const template = site.manifest.templates.find(entry => entry.path.endsWith('/csp.phtml'));
     const click = template.statements.find(statement => statement.binding === 'x-on:click');
     expect(click).toBeDefined();
-    // Alpine CSP 3.14 reads the method path for its type check and invocation.
-    expect(records[0].hits[template.id][click.id]).toBe(2);
+    // Only the collected click evaluates this directive. Native getter reads
+    // within that evaluation do not add separate hits.
+    expect(records[0].hits[template.id][click.id]).toBe(1);
 });
