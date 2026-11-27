@@ -28,6 +28,23 @@ test('source maps cover individual bindings, entities, multiline attributes and 
     assert.equal(analyzeStatements('<span\r\n text="\r\n\'x&#10;y\'"></span>', id).statements[0].start.line, 2);
 });
 
+test('attribute decoding agrees with HTML parsing without changing binding source locations', () => {
+    const {decodeHTMLAttribute} = require('entities');
+    const {parseFragment} = require('parse5');
+    for (const reference of ['&notin<', '&notin;', '&not=', '&amp;']) {
+        const parsed = parseFragment(`<span title="${reference}"></span>`).childNodes[0].attrs[0].value;
+        assert.equal(decodeHTMLAttribute(reference), parsed);
+    }
+    assert.equal(decodeHTMLAttribute('&notin<'), '&notin<');
+    const source = `<div data-bind="text: '&notin<',
+        attr: {title: '&notin;'}"></div>`;
+    const result = analyzeStatements(source, id);
+    assert.deepEqual(result.statements.map(statement => [statement.binding, statement.start.line]), [
+        ['text', 1], ['attr', 2]
+    ]);
+    assert.equal(result.content.replace(/\/\*mtc_[^*]+\*\//g, ''), source);
+});
+
 test('Magento aliases, custom nodes and render defaults get the correct binding identities', () => {
     const source = `<if args="open"><each args="items"><span ko-value="name" innerif="show"></span></each></if>
 <render></render><div render></div><render args=""></render>
