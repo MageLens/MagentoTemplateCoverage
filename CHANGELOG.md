@@ -6,6 +6,10 @@ License: see LICENSE in the repository root.
 
 # Changelog
 
+## 2.1.5 - 2026-11-27
+
+- Update entities to 9.0.0 for corrected interrupted named references in attributes and faster Alpine and binding analysis, sharing the decoder dependency with parse5. Existing Node.js requirements and CommonJS exports remain unchanged.
+
 ## 2.1.4 - 2026-11-24
 
 - Deduplicate Alpine directive rebinds in the same mutation batch and retain template attribution through morphdom updates. Regenerate instrumented copies to use binding markers that survive attribute reordering.
